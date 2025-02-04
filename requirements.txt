@@ -1,0 +1,7 @@
+yfinance
+pandas
+matplotlib
+pyTelegramBotAPI
+tensorflow
+numpy
+scikit-learn
