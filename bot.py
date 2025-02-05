@@ -2,7 +2,7 @@ from config import TICKERS
 from utils import get_token
 from analysis import analyze_stock
 from ml_forecast import predict_stock_price
-from chart import send_stock_chart
+from chart import generate_stock_chart
 from trend_classifier import classify_trend
 import telebot
 import logging
@@ -10,8 +10,14 @@ import time
 import threading
 
 # Настройка логирования
-logging.basicConfig(level=logging.INFO)
-
+logging.basicConfig(
+    level=logging.ERROR,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),  # Вывод в консоль
+        logging.FileHandler("logging.txt", mode="a")  # Запись в файл logging.txt
+    ]
+)
 bot = telebot.TeleBot(get_token())
 
 @bot.message_handler(commands=['start'])
@@ -61,7 +67,13 @@ def select_ticker(message):
                               chat_id, progress_message.message_id)
         step_counter += 1
 
-        data = analyze_stock(selected_ticker)
+        try:
+            data = analyze_stock(selected_ticker)
+        except Exception as e:
+            logging.error(f"Ошибка загрузки данных с Yahoo Finance для тикера {selected_ticker}: {e}")
+            bot.send_message(chat_id, f"Ошибка загрузки данных с Yahoo Finance: {e}")
+            return
+
         last_price = float(data["Close"].iloc[-1])
         prev_price = float(data["Close"].iloc[-2])  # Цена предыдущего дня для вычисления изменения
         price_change = last_price - prev_price
@@ -78,7 +90,12 @@ def select_ticker(message):
                               chat_id, progress_message.message_id)
         step_counter += 1
 
-        predicted_price = predict_stock_price(selected_ticker)
+        try:
+            predicted_price = predict_stock_price(selected_ticker)
+        except Exception as e:
+            logging.error(f"Ошибка прогнозирования для тикера {selected_ticker}: {e}")
+            bot.send_message(chat_id, f"Ошибка прогнозирования данных с ML-модели: {e}")
+            return
 
         # Вычисляем прошедшее время для шага 2
         elapsed_time = time.time() - step_start_time
@@ -91,7 +108,12 @@ def select_ticker(message):
                               chat_id, progress_message.message_id)
         step_counter += 1
 
-        trend = classify_trend(selected_ticker)
+        try:
+            trend = classify_trend(selected_ticker)
+        except Exception as e:
+            logging.error(f"Ошибка классификации тренда для тикера {selected_ticker}: {e}")
+            bot.send_message(chat_id, f"Ошибка классификации тренда: {e}")
+            return
 
         # Вычисляем прошедшее время для шага 3
         elapsed_time = time.time() - step_start_time
@@ -113,12 +135,21 @@ def select_ticker(message):
         signal_text += f"\n⏱️ Общее время выполнения: {total_elapsed_time:.2f} секунд."
         # Удаляем сообщение отсчёта времени
         bot.delete_message(chat_id, countdown_message.message_id)
+
+        # Генерация графика
+        try:
+            chart_path = generate_stock_chart(selected_ticker)
+        except Exception as e:
+            logging.error(f"Ошибка при генерации графика для тикера {selected_ticker}: {e}")
+            bot.send_message(chat_id, f"Ошибка при генерации графика: {e}")
+            return
         # Обновляем финальное сообщение с результатами
         bot.edit_message_text(f"✅ *Завершено!* Все шаги выполнены.\n{signal_text}",
                               chat_id, progress_message.message_id, parse_mode='Markdown')
 
         # Отправка графика
-        send_stock_chart(selected_ticker, chat_id)
+        with open(chart_path, 'rb') as chart_file:
+            bot.send_photo(chat_id, chart_file)
 
     except Exception as e:
         logging.exception("Ошибка при обработке запроса")
@@ -133,3 +164,5 @@ if __name__ == '__main__':
         bot.polling(none_stop=True)
     except Exception as e:
         logging.exception("Ошибка в основном цикле polling")
+generate_stock_chart
+

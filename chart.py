@@ -6,12 +6,19 @@ from utils import get_token
 
 bot = telebot.TeleBot(get_token())
 
-def send_stock_chart(ticker, chat_id):
-    """Создает и отправляет график цены акции за последние 24 часа."""
+import yfinance as yf
+import matplotlib.pyplot as plt
+import tempfile
+from utils import get_token
+
+bot = telebot.TeleBot(get_token())
+
+
+def generate_stock_chart(ticker):
+    """Создает график цены акции за последние 24 часа и сохраняет во временный файл."""
     data = yf.download(ticker, period="1d", interval="1h")
     if data.empty:
-        bot.send_message(chat_id, f'Не удалось получить данные для построения графика {ticker}.')
-        return
+        raise ValueError(f'Не удалось получить данные для построения графика {ticker}.')
 
     plt.figure(figsize=(10, 5))
     plt.plot(data.index, data['Close'], label=f'{ticker} Price', color='blue')
@@ -22,9 +29,9 @@ def send_stock_chart(ticker, chat_id):
     plt.grid()
     plt.tight_layout()
 
-    # Сохраняем график во временный файл
-    with tempfile.NamedTemporaryFile(suffix=".png") as tmpfile:
+    # Сохраняем график во временный файл и возвращаем путь к файлу
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmpfile:
         plt.savefig(tmpfile.name)
         plt.close()
-        tmpfile.seek(0)
-        bot.send_photo(chat_id, tmpfile)
+        return tmpfile.name  # Возвращаем путь к файлу
+
